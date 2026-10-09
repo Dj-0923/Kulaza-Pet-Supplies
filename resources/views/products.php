@@ -21,7 +21,7 @@ include resource_path('views/layouts/header.php');
             <tbody id="prod">
                 <?php foreach($products as $p): ?>
                     <tr data-cat="<?= e($p['category']) ?>" data-name="<?= e(strtolower($p['name'])) ?>">
-                        <td class="font-semibold"><?= e($p['name']) ?></td><td><?= e($p['category']) ?></td>
+                        <td><span class="font-semibold"><?= e($p['name']) ?></span><?php if (!empty($p['weight'])): ?><span class="block text-xs text-gray-400"><?= e($p['weight']) ?> kg</span><?php endif; ?></td><td><?= e($p['category']) ?></td>
                         <td>₱<?= e(number_format($p['price'], 2)) ?></td><td><?= e(number_format($p['stock'])) ?></td>
                         <?php if(!is_staff()): ?><td><button type="button" data-delete-product class="btn-red">Delete</button></td><?php endif; ?>
                     </tr>
@@ -41,7 +41,24 @@ include resource_path('views/layouts/header.php');
         <div class="space-y-4">
             <div><label class="lbl" for="pn">Product name</label><input id="pn" name="name" class="inp" placeholder="Enter product name" autocomplete="off" required></div>
             <div><label class="lbl" for="pc">Category</label>
-                <input id="pc" name="category" class="inp" placeholder="Type the product category" autocomplete="off" required>
+                <select id="pc" name="category" class="inp" required>
+                    <option value="">Choose a category</option>
+                    <option value="__new_category__">+ Add new category</option>
+                </select>
+            </div>
+            <div id="newCategoryWrap" class="hidden">
+                <label class="lbl" for="newCategory">New category</label>
+                <input id="newCategory" name="new_category" class="inp" placeholder="Enter new category" autocomplete="off" disabled>
+            </div>
+            <div>
+                <label class="flex items-center gap-2 text-sm text-gray-300">
+                    <input id="usesKg" type="checkbox" class="accent-green-600">
+                    Does this product use kg?
+                </label>
+            </div>
+            <div id="weightWrap" class="hidden">
+                <label class="lbl" for="productWeight">Weight (kg)</label>
+                <input id="productWeight" type="number" min="0.01" step="0.01" class="inp" placeholder="Enter weight in kg" disabled>
             </div>
             <div class="grid grid-cols-2 gap-4">
                 <div><label class="lbl" for="pp">Price</label><input id="pp" name="price" type="number" min="0" step="0.01" class="inp" placeholder="Enter price" required></div>
@@ -68,6 +85,33 @@ include resource_path('views/layouts/header.php');
         $('none').classList.toggle('hidden', n > 0);
     }
     const modal = $('modal');
+    const categorySelect = $('pc');
+    const newCategoryWrap = $('newCategoryWrap');
+    const newCategoryInput = $('newCategory');
+    const weightWrap = $('weightWrap');
+    const weightInput = $('productWeight');
+    function refreshAddCategoryOptions() {
+        if (!categorySelect) return;
+        const selected = categorySelect.value;
+        while (categorySelect.options.length > 2) categorySelect.remove(1);
+        getCats().forEach(category => categorySelect.add(new Option(category, category), categorySelect.options[1]));
+        categorySelect.value = selected;
+        if (categorySelect.value !== selected) categorySelect.value = '';
+    }
+    function updateCategoryInput() {
+        const isNew = categorySelect.value === '__new_category__';
+        newCategoryWrap.classList.toggle('hidden', !isNew);
+        newCategoryInput.disabled = !isNew;
+        newCategoryInput.required = isNew;
+        if (!isNew) newCategoryInput.value = '';
+    }
+    function updateWeightInput() {
+        const usesKg = $('usesKg').checked;
+        weightWrap.classList.toggle('hidden', !usesKg);
+        weightInput.disabled = !usesKg;
+        weightInput.required = usesKg;
+        if (!usesKg) weightInput.value = '';
+    }
     function renderTabs() {
         const box = $('cats');
         box.innerHTML = '';
@@ -128,7 +172,19 @@ include resource_path('views/layouts/header.php');
         toast('Product deleted (preview).');
     });
     if (modal) {
-    function openModal(v) { modal.classList.toggle('hidden', !v); modal.classList.toggle('flex', v); if (v) $('pn').focus(); }
+    function openModal(v) {
+        modal.classList.toggle('hidden', !v);
+        modal.classList.toggle('flex', v);
+        if (v) {
+            refreshAddCategoryOptions();
+            $('pn').focus();
+        }
+    }
+    refreshAddCategoryOptions();
+    categorySelect.onchange = updateCategoryInput;
+    $('usesKg').onchange = updateWeightInput;
+    updateCategoryInput();
+    updateWeightInput();
     $('openAdd').onclick = () => openModal(true);
     $('closeAdd').onclick = () => openModal(false);
     modal.onclick = e => { if (e.target === modal) openModal(false); };
@@ -136,19 +192,53 @@ include resource_path('views/layouts/header.php');
     // PREVIEW ONLY: adds the row in the browser. Back-end: delete this handler so the form posts to the server.
     $('addForm').onsubmit = e => {
         e.preventDefault();
-        const f = new FormData(e.target); f.set('category', addCat(f.get('category')));   // a new category is added everywhere
+        const f = new FormData(e.target);
+        const selectedCategory = f.get('category');
+        const category = selectedCategory === '__new_category__'
+            ? addCat(f.get('new_category'))
+            : selectedCategory;
+        if (!category) {
+            toast('Choose or enter a category.');
+            return;
+        }
+        const weight = $('usesKg').checked ? Number(weightInput.value) : null;
+        if ($('usesKg').checked && (!Number.isFinite(weight) || weight <= 0)) {
+            toast('Enter a weight greater than zero.');
+            return;
+        }
         const tr = document.createElement('tr');
-        tr.dataset.cat = f.get('category'); tr.dataset.name = f.get('name').toLowerCase();
-        [f.get('name'), f.get('category'), peso(f.get('price')), f.get('stock')].forEach((value, index) => {
+        tr.dataset.cat = category; tr.dataset.name = f.get('name').toLowerCase();
+        const nameCell = document.createElement('td');
+        const productName = document.createElement('span');
+        productName.className = 'font-semibold';
+        productName.textContent = f.get('name');
+        nameCell.appendChild(productName);
+        if (weight !== null) {
+            const weightLabel = document.createElement('span');
+            weightLabel.className = 'block text-xs text-gray-400';
+            weightLabel.textContent = weight + ' kg';
+            nameCell.appendChild(weightLabel);
+        }
+        tr.appendChild(nameCell);
+        [category, peso(f.get('price')), f.get('stock')].forEach(value => {
             const cell = document.createElement('td');
-            if (index === 0) cell.className = 'font-semibold';
             cell.textContent = value;
             tr.appendChild(cell);
         });
         const actionCell = document.createElement('td');
         actionCell.innerHTML = '<button type="button" data-delete-product class="btn-red">Delete</button>';
         tr.appendChild(actionCell);
-        $('prod').insertBefore(tr, $('none')); e.target.reset(); openModal(false); renderTabs(); fillCategorySelects(); filter(); toast('Product added (preview).');
+        $('prod').insertBefore(tr, $('none'));
+        e.target.reset();
+        categorySelect.value = '';
+        updateCategoryInput();
+        updateWeightInput();
+        openModal(false);
+        renderTabs();
+        fillCategorySelects();
+        refreshAddCategoryOptions();
+        filter();
+        toast('Product added (preview).');
     };
     }
 </script>

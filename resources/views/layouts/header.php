@@ -56,12 +56,13 @@
                 'transactions' => '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
                 'reports'      => '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
                 'monthly'      => '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="m9 16 2 2 4-4"/>',
+                'price-records' => '<path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
                 'staff'        => '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
                 'logout'       => '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
             ];
             $isStaff = is_staff();   // staff only see: Dashboard, Products (view only), Record Sale, Transaction History
             $staffRoutes = ['dashboard','products','sales.create','transactions'];
-            $nav = ['dashboard'=>'Dashboard','products'=>'Products','sales.create'=>'Record Sale','transactions'=>'Transaction History','reports'=>'Sales Reports','monthly'=>'Monthly Records','staff'=>'Staff Accounts'];
+            $nav = ['dashboard'=>'Dashboard','products'=>'Products','sales.create'=>'Record Sale','transactions'=>'Transaction History','reports'=>'Sales Reports','monthly'=>'Monthly Records','price-records'=>'Price Records','staff'=>'Staff Accounts'];
          ?>
         <?php foreach($nav as $route => $label): ?>
             <?php if(!$isStaff || in_array($route, $staffRoutes)): ?>

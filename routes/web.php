@@ -14,6 +14,24 @@ function sample_products(): array
     ];
 }
 
+// TEMPORARY price history based on the current sample product catalog.
+function sample_price_records(): array
+{
+    $records = [];
+    foreach (sample_products() as $index => $product) {
+        $records[] = [
+            'date' => date('Y-m-d', strtotime('-' . $index . ' days')),
+            'product' => $product['name'],
+            'category' => $product['category'],
+            'old_price' => round($product['price'] * 0.95, 2),
+            'new_price' => $product['price'],
+            'changed_by' => 'Admin',
+        ];
+    }
+
+    return $records;
+}
+
 // TEMPORARY starting categories. The admin can type new ones in the Add Product popup (kept in the browser only).
 // Back-end: replace with the categories table, e.g. Category::pluck('name')->all()
 function sample_categories(): array
@@ -51,5 +69,6 @@ Route::get('/products', fn () => view('products', ['products' => sample_products
 Route::get('/record-sale', fn () => view('record-sale', ['products' => sample_products()]))->name('sales.create');
 Route::view('/transactions', 'transactions')->name('transactions');
 Route::get('/sales-reports', fn () => view('sales-reports', ['sales' => sample_sales()]))->name('reports');
-Route::view('/monthly-records', 'monthly-records')->name('monthly');
+Route::get('/monthly-records', fn () => view('monthly-records', ['sales' => sample_sales()]))->name('monthly');
+Route::get('/price-records', fn () => view('price-records', ['records' => sample_price_records()]))->name('price-records');
 Route::view('/staff-accounts', 'staff-accounts')->name('staff');

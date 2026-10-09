@@ -36,13 +36,13 @@ include resource_path('views/layouts/header.php');
         const q = $('ss').value.toLowerCase();
         const list = products.map((p, i) => ({p, i})).filter(({p}) => (scat === 'All' || p.category === scat) && p.name.toLowerCase().includes(q));
         $('sgrid').innerHTML = list.map(({p, i}) => `<button type="button" ${p.stock < 1 ? 'disabled' : ''} onclick="addToCart(${i})" class="text-left rounded-xl p-3 border border-[#1f271f] bg-[#0b0e0b] hover:border-green-600 ${p.stock < 1 ? 'opacity-40' : ''}">
-            <p class="font-semibold">${p.name}</p><p class="text-xs text-gray-400">${p.category}</p>
+            <p class="font-semibold">${p.name}</p>${p.weight ? `<p class="text-xs text-gray-400">${p.weight} kg</p>` : ''}<p class="text-xs text-gray-400">${p.category}</p>
             <p class="mt-2 text-green-400 font-semibold">${peso(p.price)}</p><p class="text-xs text-gray-500">${p.stock < 1 ? 'Out of stock' : p.stock + ' in stock'}</p></button>`).join('')
             || '<p class="col-span-full text-center text-gray-400 py-12">No products match. Try another category or search.</p>';
     }
     function renderCart() {
         $('rows').innerHTML = cart.map((r, i) => { const p = products[r.p]; return `<div class="py-2 border-t border-[#1f271f]">
-            <div class="flex justify-between text-sm"><span class="font-semibold">${p.name}</span><span id="lt${i}">${peso(p.price * r.q)}</span></div>
+            <div class="flex justify-between text-sm"><span class="font-semibold">${p.name}${p.weight ? ` <span class="text-xs text-gray-400">(${p.weight} kg)</span>` : ''}</span><span id="lt${i}">${peso(p.price * r.q)}</span></div>
             <div class="flex items-center gap-2 mt-1 text-xs text-gray-400"><span>${peso(p.price)} each</span><span class="flex-1"></span>
             <button type="button" class="btn-dark !px-2 !py-0" onclick="chg(${i},-1)" aria-label="Decrease">-</button>
             <input type="number" inputmode="numeric" min="1" max="${p.stock}" value="${r.q}" aria-label="Quantity" class="inp !w-16 !py-1 text-center" onfocus="this.select()" oninput="typeQty(${i},this)" onchange="renderCart()">
