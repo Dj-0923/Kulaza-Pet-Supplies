@@ -1,4 +1,6 @@
 <?php
+/** @var bool $ok */
+/** @var array $transactions */
 $pageTitle = 'Transaction History';
 include resource_path('views/layouts/header.php');
 ?>
@@ -10,8 +12,12 @@ include resource_path('views/layouts/header.php');
         <input type="date" name="date" class="inp !w-44">
     </div>
     <table class="tbl"><tr><th>Invoice</th><th>Customer</th><th>Items</th><th>Payment</th><th>Total</th><th>Date</th></tr>
-        <!-- TEMPORARY preview transaction; replace with rows from the transactions database. -->
-        <tr><td class="font-semibold">INV-2698001</td><td>Kung Fu Lou</td><td>Tomatoes x4</td><td>Cash</td><td class="font-semibold">₱254.00</td><td>2026-09-08</td></tr>
+        <?php if (!$transactions): ?>
+            <tr><td colspan="6" class="text-gray-400 text-center" style="padding:3rem 0">No transactions yet.</td></tr>
+        <?php endif; ?>
+        <?php foreach ($transactions as $t): ?>
+            <tr><td class="font-semibold"><?= e($t['invoice']) ?></td><td><?= e($t['customer']) ?></td><td><?= e($t['items']) ?></td><td><?= e($t['payment']) ?></td><td class="font-semibold">₱<?= e(number_format($t['total'], 2)) ?></td><td><?= e($t['date']) ?></td></tr>
+        <?php endforeach; ?>
     </table>
 </div>
 <?php endif; ?>

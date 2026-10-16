@@ -1,11 +1,12 @@
 <?php
+/** @var bool $ok */
 /**
  * resources/views/price-records.php
  *
  * Expects $records (array) from the route/controller. One row per price change:
  *   ['date' => '2026-09-18', 'product' => 'Tomatoes', 'category' => 'Vegetables',
  *    'old_price' => 88.00, 'new_price' => 95.00, 'changed_by' => 'Maria']
- * The route currently supplies temporary records based on the sample products.
+ * The route builds these rows from the price_records table.
  */
 $records = $records ?? [];
 $pageTitle = 'Price Records';
@@ -20,12 +21,23 @@ $perPage  = 10;
 $peso     = fn($v) => '₱' . number_format((float) $v, 2);
 $qs       = fn(array $o) => '?' . http_build_query(array_merge(request()->query(), $o));
 
-// ---- Filter options (built only from real records) ----
-$months = ['all' => 'All time'];
-for ($i = 0; $i < 6; $i++) {
-    $m = date('Y-m', strtotime("first day of -$i month"));
-    $months[$m] = date('F Y', strtotime($m . '-01'));
+// ---- Filter options span all recorded months, with at least six months available ----
+$currentMonth = new DateTimeImmutable(date('Y-m-01'));
+$allTimeStart = $currentMonth->modify('-5 months');
+if ($records) {
+    $firstRecordMonth = new DateTimeImmutable(date('Y-m-01', strtotime(min(array_column($records, 'date')))));
+    if ($firstRecordMonth < $allTimeStart) {
+        $allTimeStart = $firstRecordMonth;
+    }
 }
+$months = ['all' => 'All time'];
+for ($cursor = $currentMonth; $cursor >= $allTimeStart; $cursor = $cursor->modify('-1 month')) {
+    $months[$cursor->format('Y-m')] = $cursor->format('F Y');
+}
+if (!array_key_exists($month, $months)) {
+    $month = date('Y-m');
+}
+$selectedMonthLabel = $months[$month];
 $categories = array_values(array_unique(array_column($records, 'category')));
 sort($categories);
 $products = [];
@@ -69,7 +81,7 @@ foreach ($periods as $label => $in) {
 
 // ---- Chart data: one series per product ----
 if ($month === 'all') {
-    $start = $base ? min(array_column($base, 'date')) : $today;
+    $start = $allTimeStart->format('Y-m-d');
     $end   = $today;
 } else {
     $start = $month . '-01';
@@ -101,7 +113,7 @@ if ($cat === '' && $prod === '') {
 } else {
     foreach ($prodSeries as $p) $series[] = ['product' => $p['product'], 'subs' => [$p]];
 }
-$chart = ['series' => $series, 'start' => $start, 'end' => $end];
+$chart = ['series' => $series, 'start' => $start, 'end' => $end, 'allTime' => $month === 'all'];
 ?>
 <?php include resource_path('views/layouts/header.php'); ?>
 
@@ -130,18 +142,30 @@ $chart = ['series' => $series, 'start' => $start, 'end' => $end];
 .pr-pill{display:inline-block;padding:2px 8px;border-radius:99px;background:#1b2a1d;color:#9fd6a6;font-size:12px}
 .pr-pager{display:flex;justify-content:space-between;align-items:center;margin-top:14px;font-size:12px;color:#8d988d}
 .pr-pager a{padding:7px 14px;border:1px solid #1e251e;border-radius:10px;color:inherit;text-decoration:none}
+.pr-period{position:relative;min-width:0}
+.pr-period-trigger{display:flex;align-items:center;justify-content:space-between;width:100%;height:44px;padding:0 14px;border-radius:10px;border:1px solid #1e251e;background:#0c100c;color:inherit;text-align:left;cursor:pointer}
+.pr-period-menu{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:30;max-height:288px;overflow-y:auto;border:1px solid #1e251e;border-radius:10px;background:#141914;padding:4px}
+.pr-period-option{display:block;width:100%;padding:8px 10px;border:0;border-radius:6px;background:transparent;color:inherit;text-align:left;cursor:pointer}
+.pr-period-option:hover,.pr-period-option[aria-selected="true"]{background:#1a2a1a}
 .pr-pager a.off{opacity:.4;pointer-events:none}
 @media(max-width:900px){.pr-filters{grid-template-columns:1fr 1fr}.pr-go{grid-column:1/-1}}
 </style>
 
 <!-- Filters -->
-<form method="GET" class="card !bg-[#0b0e0b] mb-6">
+<form method="GET" class="card bg-[#0b0e0b]! mb-6">
     <div class="pr-filters">
-        <select name="month" aria-label="Period" onchange="this.form.submit()">
-            <?php foreach ($months as $v => $label): ?>
-                <option value="<?= e($v) ?>" <?= $month === $v ? 'selected' : '' ?>><?= e($label) ?></option>
-            <?php endforeach; ?>
-        </select>
+        <input type="hidden" name="month" id="pr-period-value" value="<?= e($month) ?>">
+        <div class="pr-period" id="pr-period">
+            <button type="button" class="pr-period-trigger" id="pr-period-trigger" aria-label="Period" aria-haspopup="listbox" aria-expanded="false">
+                <span><?= e($selectedMonthLabel) ?></span>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div class="pr-period-menu" id="pr-period-menu" role="listbox" aria-label="Period options" hidden>
+                <?php foreach ($months as $v => $label): ?>
+                    <button type="button" class="pr-period-option" role="option" aria-selected="<?= $month === $v ? 'true' : 'false' ?>" data-month="<?= e($v) ?>"><?= e($label) ?></button>
+                <?php endforeach; ?>
+            </div>
+        </div>
         <select name="category" aria-label="Category" onchange="this.form.product.value='';this.form.submit()">
             <option value="">All Categories</option>
             <?php foreach ($categories as $c): ?>
@@ -162,6 +186,40 @@ $chart = ['series' => $series, 'start' => $start, 'end' => $end];
         <button class="pr-go" type="submit">Refresh Records</button>
     </div>
 </form>
+<script>
+    (() => {
+        const picker = document.getElementById('pr-period');
+        const trigger = document.getElementById('pr-period-trigger');
+        const menu = document.getElementById('pr-period-menu');
+        const value = document.getElementById('pr-period-value');
+        if (!picker || !trigger || !menu || !value) return;
+
+        trigger.addEventListener('click', () => {
+            const opening = menu.hidden;
+            menu.hidden = !opening;
+            trigger.setAttribute('aria-expanded', String(opening));
+        });
+        menu.addEventListener('click', event => {
+            const option = event.target.closest('button[data-month]');
+            if (!option) return;
+            value.value = option.dataset.month;
+            picker.closest('form').submit();
+        });
+        document.addEventListener('click', event => {
+            if (!picker.contains(event.target)) {
+                menu.hidden = true;
+                trigger.setAttribute('aria-expanded', 'false');
+            }
+        });
+        document.addEventListener('keydown', event => {
+            if (event.key === 'Escape') {
+                menu.hidden = true;
+                trigger.setAttribute('aria-expanded', 'false');
+                trigger.focus();
+            }
+        });
+    })();
+</script>
 
 <!-- Stats -->
 <div class="grid grid-cols-3 gap-4 mb-6">
@@ -169,15 +227,20 @@ $chart = ['series' => $series, 'start' => $start, 'end' => $end];
         $l  = $s['latest'];
         $ch = $l ? $l['new_price'] - $l['old_price'] : 0;
         $pp = $l && $l['old_price'] > 0 ? $ch / $l['old_price'] * 100 : 0;
+        $initialPrice = $l && $l['new_price'] === $l['old_price'];
     ?>
         <div class="pr-stat <?= $l ? ($ch > 0 ? 'rise' : 'drop') : '' ?>">
             <div class="pr-top">
                 <span class="pr-mute"><?= e($s['label']) ?></span>
-                <span class="pr-cnt"><?= (int) $s['count'] ?> <?= $s['count'] === 1 ? 'change' : 'changes' ?></span>
+                <span class="pr-cnt"><?= (int) $s['count'] ?> <?= $s['count'] === 1 ? 'record' : 'records' ?></span>
             </div>
             <?php if ($l): ?>
                 <div class="pr-hl"><?= e($l['product']) ?>
-                    <span class="<?= $ch > 0 ? 'pr-up' : 'pr-down' ?>"><?= $ch > 0 ? '▲ +' : '▼ ' ?><?= number_format($pp, 1) ?>%</span>
+                    <?php if ($initialPrice): ?>
+                        <span class="pr-pill">Initial price</span>
+                    <?php else: ?>
+                        <span class="<?= $ch > 0 ? 'pr-up' : 'pr-down' ?>"><?= $ch > 0 ? '▲ +' : '▼ ' ?><?= number_format($pp, 1) ?>%</span>
+                    <?php endif; ?>
                 </div>
                 <div class="pr-mute mt-1"><?= e($peso($l['old_price'])) ?> to <?= e($peso($l['new_price'])) ?> on <?= e($l['date']) ?></div>
             <?php else: ?>
@@ -188,7 +251,7 @@ $chart = ['series' => $series, 'start' => $start, 'end' => $end];
 </div>
 
 <!-- Graph -->
-<div class="card !bg-[#0b0e0b] mb-6">
+<div class="card bg-[#0b0e0b]! mb-6">
     <div class="flex justify-between items-baseline">
         <p class="font-semibold mb-2"><?= e($prod !== '' ? "$prod price over time"
             : ($cat !== '' ? "Products in $cat · price over time" : 'Average price per category over time')) ?></p>
@@ -203,7 +266,7 @@ $chart = ['series' => $series, 'start' => $start, 'end' => $end];
 </div>
 
 <!-- Records table -->
-<div class="card !bg-[#0b0e0b]">
+<div class="card bg-[#0b0e0b]!">
     <p class="font-semibold mb-2">Price change records</p>
     <?php if ($total === 0): ?>
         <div class="pr-empty">No Data</div>
@@ -221,9 +284,13 @@ $chart = ['series' => $series, 'start' => $start, 'end' => $end];
                     <td><span class="pr-pill"><?= e($r['category']) ?></span></td>
                     <td><?= e($peso($r['old_price'])) ?></td>
                     <td><strong><?= e($peso($r['new_price'])) ?></strong></td>
-                    <td class="<?= $ch > 0 ? 'pr-up' : 'pr-down' ?>">
-                        <?= $ch > 0 ? '▲' : '▼' ?> <?= e($peso(abs($ch))) ?> (<?= $ch > 0 ? '+' : '' ?><?= number_format($pp, 1) ?>%)
-                    </td>
+                    <?php if ((float) $r['new_price'] === (float) $r['old_price']): ?>
+                        <td class="pr-mute">Initial price</td>
+                    <?php else: ?>
+                        <td class="<?= $ch > 0 ? 'pr-up' : 'pr-down' ?>">
+                            <?= $ch > 0 ? '▲' : '▼' ?> <?= e($peso(abs($ch))) ?> (<?= $ch > 0 ? '+' : '' ?><?= number_format($pp, 1) ?>%)
+                        </td>
+                    <?php endif; ?>
                     <td><?= e($r['changed_by'] ?? '-') ?></td>
                 </tr>
             <?php endforeach; ?>
@@ -250,6 +317,7 @@ $chart = ['series' => $series, 'start' => $start, 'end' => $end];
     const iso = t => new Date(t).toISOString().slice(0, 10);
     const peso = v => '₱' + Number(v).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
     const fd = t => new Date(t).toLocaleDateString('en-US', {month: 'short', day: 'numeric', timeZone: 'UTC'});
+    const fm = t => new Date(t).toLocaleDateString('en-US', {month: 'short', timeZone: 'UTC'});
 
     // price in effect on each day, per product
     const ser = DATA.series.map((s, k) => ({
@@ -277,11 +345,29 @@ $chart = ['series' => $series, 'start' => $start, 'end' => $end];
     document.getElementById('pr-leg').innerHTML = one ? '' :
         ser.map(q => `<span><i style="background:${q.col}"></i>${q.p}</span>`).join('');
 
+    const startDate = new Date(`${DATA.start}T00:00:00Z`);
+    const endDate = new Date(`${DATA.end}T00:00:00Z`);
+    const monthSpan = (endDate.getUTCFullYear() - startDate.getUTCFullYear()) * 12
+        + endDate.getUTCMonth() - startDate.getUTCMonth();
+    const monthStep = Math.max(1, Math.ceil(monthSpan / 6));
+    const tickIndices = new Set([0, n - 1]);
+    for (let month = 0; month <= monthSpan; month += monthStep) {
+        const tickDate = new Date(Date.UTC(
+            startDate.getUTCFullYear(),
+            startDate.getUTCMonth() + month,
+            1
+        ));
+        const tickIndex = Math.round((tickDate.getTime() - startDate.getTime()) / DAY);
+        if (tickIndex >= 0 && tickIndex < n) tickIndices.add(tickIndex);
+    }
+    const ticks = [...tickIndices].sort((a, b) => a - b);
     let g = '';
-    ts.forEach((t, i) => g += `<line x1="${X(i)}" x2="${X(i)}" y1="${T}" y2="${H - B}" stroke="#fff" opacity=".05"/>`);
-    [0, .25, .5, .75, 1].forEach((k, j) => {
-        const i = Math.round(k * (n - 1));
-        g += `<text x="${X(i)}" y="16" fill="#8d988d" font-size="11" text-anchor="${j == 0 ? 'start' : j == 4 ? 'end' : 'middle'}">${fd(ts[i])}</text>`;
+    ts.forEach((_, i) => {
+        g += `<line x1="${X(i)}" x2="${X(i)}" y1="${T}" y2="${H - B}" stroke="#fff" opacity=".05"/>`;
+    });
+    ticks.forEach((i, j) => {
+        const anchor = j === 0 ? 'start' : j === ticks.length - 1 ? 'end' : 'middle';
+        g += `<text x="${X(i)}" y="16" fill="#8d988d" font-size="11" text-anchor="${anchor}">${DATA.allTime ? fm(ts[i]) : fd(ts[i])}</text>`;
     });
     let body = '';
     ser.forEach(q => {
@@ -312,16 +398,31 @@ $chart = ['series' => $series, 'start' => $start, 'end' => $end];
             const q = ser[0].pts[i], ch = q.d;
             tip.innerHTML = `<small>${fd(ts[i])}</small><b>${peso(q.v)}</b>` +
                 (q.has ? `<div class="${ch > 0 ? 'pr-up' : 'pr-down'}">${ch > 0 ? '▲ +' : '▼ -'}${peso(Math.abs(ch))} from ${peso(q.v - ch)}</div>` : '');
-            tip.style.top = (ys[0] / H * 100) + '%'; tip.style.transform = 'translate(-50%,-125%)';
         } else {
             tip.innerHTML = `<small>${fd(ts[i])}</small>` + ser.map(q => {
                 const z = q.pts[i], ch = z.d;
                 return `<div class="r"><span><i style="background:${q.col}"></i>${q.p}</span><b>${peso(z.v)}</b>` +
                     (z.has ? `<span class="${ch > 0 ? 'pr-up' : 'pr-down'}">${ch > 0 ? '▲' : '▼'}</span>` : '') + `</div>`;
             }).join('');
-            tip.style.top = '12%'; tip.style.transform = 'translate(-50%,0)';
         }
-        tip.style.left = Math.min(Math.max(x / W * 100, 14), 86) + '%'; tip.style.display = 'block';
+        tip.style.display = 'block';
+        tip.style.transform = 'none';
+
+        const chartRect = box.getBoundingClientRect();
+        const svgRect = svg.getBoundingClientRect();
+        const pointX = svgRect.left - chartRect.left + x / W * svgRect.width;
+        const pointY = svgRect.top - chartRect.top + ys[0] / H * svgRect.height;
+        const tipWidth = tip.offsetWidth;
+        const tipHeight = tip.offsetHeight;
+        const gap = 12;
+        const left = Math.min(
+            Math.max(pointX - tipWidth / 2, 8),
+            Math.max(8, chartRect.width - tipWidth - 8)
+        );
+        const above = pointY - tipHeight - gap;
+        const top = above >= 8 ? above : Math.min(pointY + gap, chartRect.height - tipHeight - 8);
+        tip.style.left = `${left}px`;
+        tip.style.top = `${Math.max(8, top)}px`;
     };
     const idx = e => {
         const r = svg.getBoundingClientRect(), cl = e.touches ? e.touches[0].clientX : e.clientX;

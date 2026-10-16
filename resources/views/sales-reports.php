@@ -1,10 +1,14 @@
 <?php
+/** @var bool $ok */
+/** @var array $sales */
+/** @var array $categories */
+$cats = $categories;
 $pageTitle = 'Sales Reports';
 include resource_path('views/layouts/header.php');
 ?>
 <?php if (!$ok): ?>
 <div class="card">You do not have access to this page.</div>
-<?php else: ?><?php  $cats = sample_categories();  ?>
+<?php else: ?>
 <div class="card flex flex-wrap gap-3 items-end mb-4">
     <div><label class="lbl" for="rf">Date From</label><input id="rf" type="date" name="from" class="inp"></div>
     <div><label class="lbl" for="rt">Date To</label><input id="rt" type="date" name="to" class="inp"></div>
@@ -26,7 +30,7 @@ include resource_path('views/layouts/header.php');
 </div>
 <?php endif; ?>
 <?php if ($ok): ob_start(); ?><script>
-    // Sample data. Back-end: each sale needs date (YYYY-MM-DD), payment, items[{name, category, price, qty}].
+    // Each sale: date (YYYY-MM-DD), payment, items[{name, category, price, qty}].
     const sales = <?= json_encode($sales) ?>;
     const $ = id => document.getElementById(id);
     const ymd = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
